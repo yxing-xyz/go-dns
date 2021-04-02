@@ -3,3 +3,6 @@ go.sum
 .idea/vcs.xml
 .idea/workspace.xml
 go-dns
+.idea/.gitignore
+.idea/go-dns.iml
+.idea/modules.xml

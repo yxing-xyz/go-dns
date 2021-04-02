@@ -17,7 +17,7 @@ type server struct {
 }
 
 // constants
-const resolvFile = "/etc/resolv.test.conf"
+const resolvFile = "/etc/resolv.conf"
 
 // NewDNSServerDefault create default dns server
 func NewDNSServerDefault() (srv *dns.Server) {
@@ -38,16 +38,28 @@ func NewDNSServerDefault() (srv *dns.Server) {
 
 // ServeDNS query DNS record
 func (s *server) ServeDNS(w dns.ResponseWriter, req *dns.Msg) {
-	msg := dns.Msg{}
+	msg := &dns.Msg{}
 	msg.SetReply(req)
 	msg.Authoritative = true
-	// Stuff must be in the answer section
-	for _, a := range s.query(req) {
-		log.Info().Msgf("answer: %v", a)
-		msg.Answer = append(msg.Answer, a)
+	// Stuff must be in the answer sectione
+	if (strings.Count(req.Question[0].Name, ".") == 1){
+		for _, a := range s.query(req) {
+			log.Info().Msgf("answer: %v", a)
+			msg.Answer = append(msg.Answer, a)
+		}
+	} else {
+		// 外部域名
+		c := new(dns.Client)
+		address, err := s.getResolveServer()
+		if err != nil {
+			log.Error().Msg("错误获取域名服务器: " + err.Error())
+		}
+		msg, _, err = c.Exchange(req, address)
+		if err != nil {
+			log.Error().Msg("dns错误: "+ err.Error())
+		}
 	}
-
-	_ = w.WriteMsg(&msg)
+	_ = w.WriteMsg(msg)
 }
 
 // Simulate kubernetes-like dns look up logic
@@ -83,39 +95,10 @@ func (s *server) query(req *dns.Msg) (rr []dns.RR) {
 
 // get all domains need to lookup
 func (s *server) fetchAllPossibleDomains(name string) []string {
-	count := strings.Count(name, ".")
 	domainSuffixes := s.getSuffixes()
 	var namesToLookup []string
-	switch count {
-	case 0:
-		// invalid domain, dns name always ends with a '.'
-		log.Warn().Msgf("received invalid domain query: " + name)
-	case 1:
-		if len(domainSuffixes) > 0 {
-			// service name
-			namesToLookup = append(namesToLookup, name+domainSuffixes[0])
-		}
-		// raw domain
-		namesToLookup = append(namesToLookup, name)
-	case 2:
-		if len(domainSuffixes) > 1 {
-			// stateful-set-pod.service name
-			namesToLookup = append(namesToLookup, name+domainSuffixes[0])
-			// service.namespace name
-			namesToLookup = append(namesToLookup, name+domainSuffixes[1])
-		}
-		// raw domain
-		namesToLookup = append(namesToLookup, name)
-	case 3:
-		// raw domain
-		namesToLookup = append(namesToLookup, name)
-		if len(domainSuffixes) > 1 {
-			// stateful-set-pod.service.namespace name
-			namesToLookup = append(namesToLookup, name+domainSuffixes[1])
-		}
-	default:
-		// raw domain
-		namesToLookup = append(namesToLookup, name)
+	for _, v := range domainSuffixes {
+		namesToLookup = append(namesToLookup, name+v)
 	}
 	return namesToLookup
 }
