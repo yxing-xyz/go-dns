@@ -9,7 +9,7 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-// b
+// c
 func init() {
 	zerolog.SetGlobalLevel(zerolog.InfoLevel)
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
